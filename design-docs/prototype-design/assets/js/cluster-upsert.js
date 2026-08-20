@@ -586,15 +586,6 @@ window.ClusterUpsert = (function () {
     return '';
   }
 
-  function resolveKeyForSubmit(keyItem) {
-    if (!keyItem.originalKey) return keyItem.key || '';
-    if (keyItem.keyModified) {
-      var trimmed = String(keyItem.key || '').trim();
-      return trimmed || keyItem.originalKey;
-    }
-    return keyItem.originalKey;
-  }
-
   // ============ 大模型配置 ============
   function renderGatewayConfig(data, isAdd) {
     ensurePrefilledData(data);
