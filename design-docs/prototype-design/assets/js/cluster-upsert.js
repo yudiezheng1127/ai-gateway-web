@@ -226,7 +226,17 @@ window.ClusterUpsert = (function () {
         model_mappings: [
           { source_model: 'gpt-4-turbo', target_model: 'gpt-4o' },
         ],
-        keys: [{ name: '', key: '', weight: 100 }],
+        keys: row.name
+          ? [
+              {
+                name: 'primary',
+                key: 'sk-proj-abcd1234efgh5678ijkl',
+                weight: 100,
+                originalKey: 'sk-proj-abcd1234efgh5678ijkl',
+                keyModified: false,
+              },
+            ]
+          : [{ name: '', key: '', weight: 100 }],
         key_policy: {
           strategy: 'weighted_random',
           max_retries: 0,
@@ -564,8 +574,29 @@ window.ClusterUpsert = (function () {
     );
   }
 
+  function getKeyDisplayValue(keyItem, isAdd) {
+    if (isAdd || !keyItem) return keyItem.key || '';
+    if (keyItem.keyModified) return keyItem.key || '';
+    if (keyItem.originalKey) return maskSecretKey(keyItem.originalKey);
+    if (keyItem.key) {
+      keyItem.originalKey = keyItem.key;
+      keyItem.keyModified = false;
+      return maskSecretKey(keyItem.key);
+    }
+    return '';
+  }
+
+  function resolveKeyForSubmit(keyItem) {
+    if (!keyItem.originalKey) return keyItem.key || '';
+    if (keyItem.keyModified) {
+      var trimmed = String(keyItem.key || '').trim();
+      return trimmed || keyItem.originalKey;
+    }
+    return keyItem.originalKey;
+  }
+
   // ============ 大模型配置 ============
-  function renderGatewayConfig(data) {
+  function renderGatewayConfig(data, isAdd) {
     ensurePrefilledData(data);
     var llm = data.llmConfigData;
     var ipStr = getInstanceIpFirstStr(data);
@@ -686,9 +717,14 @@ window.ClusterUpsert = (function () {
     // 服务鉴权 Keys 表格
     var keyRows = (llm.keys || [])
       .map(function (keyItem, index) {
+        var displayKey = getKeyDisplayValue(keyItem, isAdd);
         return (
           '<tr data-key-index="' +
           index +
+          '" data-original-key="' +
+          IvuUI.escapeHtml(keyItem.originalKey || '') +
+          '" data-key-modified="' +
+          (keyItem.keyModified ? 'true' : 'false') +
           '">' +
           '<td><div class="ivu-input-wrapper ivu-input-type-text"><input type="text" class="ivu-input proto-key-name" data-index="' +
           index +
@@ -698,7 +734,7 @@ window.ClusterUpsert = (function () {
           '<td><div class="ivu-input-wrapper ivu-input-type-text"><input type="text" class="ivu-input proto-key-value" data-index="' +
           index +
           '" value="' +
-          IvuUI.escapeHtml(keyItem.key || '') +
+          IvuUI.escapeHtml(displayKey) +
           '" placeholder="Key 值" autocomplete="new-password" /></div></td>' +
           '<td style="width:120px;">' +
           '<div class="ivu-input-number ivu-input-number-default" style="width:100%;">' +
@@ -1310,14 +1346,25 @@ window.ClusterUpsert = (function () {
       var nameInput = row.querySelector('.proto-key-name');
       var valueInput = row.querySelector('.proto-key-value');
       var weightInput = row.querySelector('.proto-key-weight');
+      var originalKey = row.getAttribute('data-original-key') || '';
+      var keyModified = row.getAttribute('data-key-modified') === 'true';
+      var keyValue = valueInput ? valueInput.value : '';
+      if (originalKey && !keyModified) {
+        var trimmed = String(keyValue || '').trim();
+        if (!trimmed || trimmed === maskSecretKey(originalKey)) {
+          keyValue = originalKey;
+        }
+      }
       data.llmConfigData.keys.push({
         name: nameInput ? nameInput.value : '',
-        key: valueInput ? valueInput.value : '',
+        key: keyValue,
         weight: weightInput
           ? weightInput.value === ''
             ? 0
             : Number(weightInput.value)
           : 0,
+        originalKey: originalKey,
+        keyModified: keyModified,
       });
     });
   }
@@ -1494,7 +1541,7 @@ window.ClusterUpsert = (function () {
         case 3:
           return renderInstancePool(state.data);
         case 4:
-          return renderGatewayConfig(state.data);
+          return renderGatewayConfig(state.data, state.isAdd);
         case 5:
           return renderReview(state.data);
         default:
@@ -1672,6 +1719,21 @@ window.ClusterUpsert = (function () {
         });
       });
 
+      bodyEl.querySelectorAll('.proto-key-value').forEach(function (input) {
+        input.addEventListener('focus', function () {
+          var row = input.closest('[data-key-index]');
+          if (!row) return;
+          if (input.value.indexOf('****') !== -1) {
+            input.value = '';
+            row.setAttribute('data-key-modified', 'true');
+          }
+        });
+        input.addEventListener('input', function () {
+          var row = input.closest('[data-key-index]');
+          if (row) row.setAttribute('data-key-modified', 'true');
+        });
+      });
+
       // 添加映射
       var addMappingBtn = bodyEl.querySelector('#cluster-add-mapping');
       if (addMappingBtn)
@@ -1728,7 +1790,13 @@ window.ClusterUpsert = (function () {
           syncFromDom(bodyEl, state.data);
           if (!state.data.llmConfigData.keys)
             state.data.llmConfigData.keys = [];
-          state.data.llmConfigData.keys.push({ name: '', key: '', weight: 0 });
+          state.data.llmConfigData.keys.push({
+            name: '',
+            key: '',
+            weight: 0,
+            originalKey: '',
+            keyModified: false,
+          });
           render();
         });
 
