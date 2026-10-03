@@ -259,6 +259,9 @@ window.MockData = {
           port: 443,
         },
       ],
+      instance_source: 'instance_pool',
+      k8s_pool_name: '',
+      k8s_instance_pool: [],
       model_protocols: ['openai'],
       protocol_paths: { openai: '/v1' },
       time_zone: 'Asia/Shanghai',
@@ -283,6 +286,9 @@ window.MockData = {
       instance_pool: [
         { name: 'api', addr: 'api.openai.com', weight: 100, port: 443 },
       ],
+      instance_source: 'instance_pool',
+      k8s_pool_name: '',
+      k8s_instance_pool: [],
       model_protocols: ['openai'],
       create_time: 1704067200,
       update_time: 1717209600,
@@ -295,6 +301,12 @@ window.MockData = {
       keys: [{ name: 'key-claude', key: 'sk-ant-xxxx' }],
       instance_pool: [
         { name: 'api', addr: 'api.anthropic.com', weight: 100, port: 443 },
+      ],
+      instance_source: 'k8s_pool',
+      k8s_pool_name: 'llm-inference-pool',
+      k8s_instance_pool: [
+        { addr: '10.0.0.11', port: 8000, weight: 100 },
+        { addr: '10.0.0.12', port: 8000, weight: 100 },
       ],
       model_protocols: ['anthropic'],
       create_time: 1714521600,
@@ -437,6 +449,87 @@ window.MockData = {
       },
     ],
   },
+  aiCacheRules: {
+    rules: [
+      {
+        name: 'cache-deepseek-chat',
+        cond: 'req_ai_intent_in("task_type", "chat", false)',
+        cache_key_strategy: 'lastQuestion',
+        cache_ttl: 3600,
+        max_body_bytes: 1048576,
+        max_value_bytes: 1048576,
+        created_at: 1782345000,
+        updated_at: 1782345000,
+      },
+      {
+        name: 'cache-all-questions',
+        cond: 'req_header_value_in("x-cache-scope", "full", false)',
+        cache_key_strategy: 'allQuestions',
+        cache_ttl: 0,
+        max_body_bytes: 2097152,
+        max_value_bytes: 1048576,
+        created_at: 1782345100,
+        updated_at: 1782345100,
+      },
+      {
+        name: 'cache-bypass-stream',
+        cond: 'req_query_value_in("stream", "1", false)',
+        cache_key_strategy: 'disabled',
+        cache_ttl: 0,
+        max_body_bytes: 1048576,
+        max_value_bytes: 1048576,
+        created_at: 1782345200,
+        updated_at: 1782345200,
+      },
+    ],
+  },
+  trafficMirrorRules: {
+    rules: [
+      {
+        name: 'mirror-gpt4o-to-shadow-v2',
+        cond: 'req_ai_model_in("gpt-4o", false)',
+        mirror_cluster: 'cluster-test1',
+        percentage: 100,
+        remove_headers: ['Authorization', 'Cookie', 'X-Api-Key'],
+        set_headers: { 'x-mirror-source': 'prod' },
+        body_rewrites: [{ path: 'model', value: 'gpt-4o-shadow' }],
+        path_rewrite: '',
+        created_at: 1782345000,
+        updated_at: 1782345000,
+      },
+      {
+        name: 'mirror-canary-10pct',
+        cond: 'req_header_value_in("x-canary", "true", false)',
+        mirror_cluster: 'test',
+        percentage: 10,
+        remove_headers: [],
+        set_headers: {},
+        body_rewrites: [],
+        path_rewrite: '/v1/chat/completions',
+        created_at: 1782345100,
+        updated_at: 1782345100,
+      },
+    ],
+  },
+  intentConfig: {
+    min_confidence: 0.6,
+    questions: [
+      {
+        name: 'task_type',
+        type: 'choice',
+        instructions: '判断用户请求的主要任务类型',
+        criteria: ['代码生成', '文本摘要', '问答', '翻译'],
+        min_confidence: 0.7,
+      },
+      {
+        name: 'complexity',
+        type: 'score',
+        instructions: '评估任务的复杂程度',
+        levels: ['简单', '一般', '复杂', '非常复杂'],
+      },
+    ],
+  },
+  k8sPoolNames: ['llm-inference-pool', 'deepseek-prod-pool', 'openai-shared-pool'],
   forwardRules: [
     {
       name: 'vip-user-route',
@@ -1213,6 +1306,20 @@ window.MockData = {
     rate_limit_hits: 320,
     auth_rejects: 45,
     logs_total: 152300,
+    cache: {
+      hit_count: 42000,
+      miss_count: 38000,
+      skip_count: 72300,
+      hit_rate: 0.525,
+      read_tokens: 12000000,
+      write_tokens: 3000000,
+    },
+    mirror: { hit_count: 8600 },
+    intent: {
+      classified_count: 98000,
+      unknown_count: 2000,
+      unknown_rate: 0.02,
+    },
   },
 
   reportTimeseries: {
@@ -1276,6 +1383,21 @@ window.MockData = {
         { time: 1782345240, currency: 'USD', value: 0.0000128 },
       ],
     },
+    cache_tokens: {
+      bucket_sec: 60,
+      series: [
+        { time: 1782345000, kind: 'cache_read', value: 32000 },
+        { time: 1782345000, kind: 'cache_write', value: 8000 },
+        { time: 1782345060, kind: 'cache_read', value: 28000 },
+        { time: 1782345060, kind: 'cache_write', value: 6500 },
+        { time: 1782345120, kind: 'cache_read', value: 41000 },
+        { time: 1782345120, kind: 'cache_write', value: 9200 },
+        { time: 1782345180, kind: 'cache_read', value: 36000 },
+        { time: 1782345180, kind: 'cache_write', value: 7100 },
+        { time: 1782345240, kind: 'cache_read', value: 39000 },
+        { time: 1782345240, kind: 'cache_write', value: 8400 },
+      ],
+    },
   },
 
   reportRankings: {
@@ -1328,6 +1450,27 @@ window.MockData = {
         { name: 'completion', request_count: 4300, error_count: 100, input_tokens: 1340000, output_tokens: 190000 },
       ],
     },
+    ai_intent_answer: {
+      items: [
+        { name: '代码生成', request_count: 68000, error_count: 420, input_tokens: 40000000, output_tokens: 5200000 },
+        { name: '问答', request_count: 45000, error_count: 310, input_tokens: 26000000, output_tokens: 3600000 },
+        { name: '文本摘要', request_count: 22000, error_count: 180, input_tokens: 13000000, output_tokens: 1700000 },
+        { name: 'unknown', request_count: 2000, error_count: 60, input_tokens: 1100000, output_tokens: 120000 },
+      ],
+    },
+    ai_cache_status: {
+      items: [
+        { name: 'hit', request_count: 42000, error_count: 120, input_tokens: 24000000, output_tokens: 3200000 },
+        { name: 'miss', request_count: 38000, error_count: 260, input_tokens: 22000000, output_tokens: 3000000 },
+        { name: 'skip', request_count: 72300, error_count: 820, input_tokens: 42341233, output_tokens: 5893441 },
+      ],
+    },
+    mirror_hit: {
+      items: [
+        { name: '1', request_count: 8600, error_count: 40, input_tokens: 5100000, output_tokens: 680000 },
+        { name: '0', request_count: 143700, error_count: 1160, input_tokens: 83241233, output_tokens: 11413441 },
+      ],
+    },
   },
 
   reportDistribution: {
@@ -1355,6 +1498,27 @@ window.MockData = {
       items: [
         { name: '1', request_count: 120000, ratio: 0.788 },
         { name: '0', request_count: 32300, ratio: 0.212 },
+      ],
+    },
+    ai_intent_answer: {
+      items: [
+        { name: '代码生成', request_count: 68000, ratio: 0.4466 },
+        { name: '问答', request_count: 45000, ratio: 0.2955 },
+        { name: '文本摘要', request_count: 22000, ratio: 0.1445 },
+        { name: 'unknown', request_count: 2000, ratio: 0.0131 },
+      ],
+    },
+    ai_cache_status: {
+      items: [
+        { name: 'hit', request_count: 42000, ratio: 0.2758 },
+        { name: 'miss', request_count: 38000, ratio: 0.2495 },
+        { name: 'skip', request_count: 72300, ratio: 0.4747 },
+      ],
+    },
+    mirror_hit: {
+      items: [
+        { name: '1', request_count: 8600, ratio: 0.0565 },
+        { name: '0', request_count: 143700, ratio: 0.9435 },
       ],
     },
   },
@@ -1415,6 +1579,10 @@ window.MockData = {
         level1Name: null, level1: null,
         client_ip: '192.168.1.100', header_host: 'api.example.org', origin_uri: '/v1/chat',
         req_headers: null, res_headers: null,
+        ai_cache_status: '', mirror_hit: false, mirror_cluster: '',
+        ai_intent_question: '', ai_intent_answer: '', ai_intent_confidence: null,
+        ai_intent_source: '', ai_intent_latency_us: null,
+        ai_intent_cache_hit: null, ai_intent_questions_version: '',
       },
       {
         logid: 12349, log_time: 1782345460, hostid: 'gw-01', product: 'BFE',

@@ -94,6 +94,15 @@ export default {
                 'AdvanceRouteRuleManage': 'iconfont icon-zhuanfa',
                 'RouteTableManage': 'iconfont icon-zhuanfa',
 
+                'FeatureEnhance.list': 'ivu-icon-ios-color-wand',
+                'FeatureEnhanceManage': 'ivu-icon-ios-color-wand',
+                'AICacheRule.list': 'ivu-icon-ios-flash',
+                'AICacheRuleManage': 'ivu-icon-ios-flash',
+                'TrafficMirrorRule.list': 'ivu-icon-ios-copy',
+                'TrafficMirrorRuleManage': 'ivu-icon-ios-copy',
+                'IntentConfig.list': 'ivu-icon-ios-chatbubbles',
+                'IntentConfigManage': 'ivu-icon-ios-chatbubbles',
+
                 'EppPool.list': 'iconfont icon-jiqun',
                 'ModelPrice.list': 'ivu-icon-logo-yen',
 

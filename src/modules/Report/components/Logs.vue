@@ -4,7 +4,7 @@
     <div class="logs-toolbar">
       <div class="report-filter-item">
         <label>{{ $t('report.requestedModels') }}</label>
-        <i-Input v-model="requestedModels" :placeholder="$t('report.requestedModelsPlaceholder')" />
+        <Input v-model="requestedModels" :placeholder="$t('report.requestedModelsPlaceholder')" />
       </div>
       <div class="report-filter-item">
         <label>{{ $t('report.errOnly') }}</label>
@@ -15,7 +15,38 @@
       </div>
       <div class="report-filter-item">
         <label>{{ $t('report.keyword') }}</label>
-        <i-Input v-model="keyword" :placeholder="$t('report.keywordPlaceholder')" />
+        <Input v-model="keyword" :placeholder="$t('report.keywordPlaceholder')" />
+      </div>
+      <div class="report-filter-item">
+        <label>{{ $t('report.cacheStatus') }}</label>
+        <Select v-model="cacheStatus" style="width:100px" clearable :placeholder="$t('report.allOption')">
+          <Option value="hit">{{ $t('report.cacheStatusHit') }}</Option>
+          <Option value="miss">{{ $t('report.cacheStatusMiss') }}</Option>
+          <Option value="skip">{{ $t('report.cacheStatusSkip') }}</Option>
+        </Select>
+      </div>
+      <div class="report-filter-item">
+        <label>{{ $t('report.mirrorHit') }}</label>
+        <Select v-model="mirrorHit" style="width:100px" clearable :placeholder="$t('report.allOption')">
+          <Option value="1">{{ $t('report.mirrorHitYes') }}</Option>
+          <Option value="0">{{ $t('report.mirrorHitNo') }}</Option>
+        </Select>
+      </div>
+      <div class="report-filter-item">
+        <label>{{ $t('report.intentQuestion') }}</label>
+        <Input v-model="intentQuestion" :placeholder="$t('report.intentQuestionPlaceholder')" />
+      </div>
+      <div class="report-filter-item">
+        <label>{{ $t('report.intentAnswer') }}</label>
+        <Input v-model="intentAnswer" :placeholder="$t('report.intentAnswerPlaceholder')" />
+      </div>
+      <div class="report-filter-item">
+        <label>{{ $t('report.intentSource') }}</label>
+        <Select v-model="intentSource" style="width:150px" clearable :placeholder="$t('report.allOption')">
+          <Option value="explicit_header">{{ $t('report.intentSourceExplicitHeader') }}</Option>
+          <Option value="classifier">{{ $t('report.intentSourceClassifier') }}</Option>
+          <Option value="cache">{{ $t('report.intentSourceCache') }}</Option>
+        </Select>
       </div>
       <div class="report-filter-actions">
         <Button type="primary" @click="searchLogs">{{ $t('report.query') }}</Button>
@@ -84,6 +115,42 @@
             <dt>{{ $t('report.originUri') }}</dt>
             <dd>{{ selectedRow.origin_uri || '-' }}</dd>
           </div>
+          <div class="detail-item">
+            <dt>{{ $t('report.cacheStatus') }}</dt>
+            <dd>{{ selectedRow.ai_cache_status || '-' }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>{{ $t('report.mirrorHit') }}</dt>
+            <dd>{{ selectedRow.mirror_hit ? $t('report.yes') + (selectedRow.mirror_cluster ? '（' + selectedRow.mirror_cluster + '）' : '') : $t('report.no') }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>{{ $t('report.intentQuestion') }}</dt>
+            <dd>{{ selectedRow.ai_intent_question || '-' }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>{{ $t('report.intentAnswer') }}</dt>
+            <dd>{{ selectedRow.ai_intent_answer || '-' }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>{{ $t('report.intentConfidence') }}</dt>
+            <dd>{{ selectedRow.ai_intent_confidence != null ? selectedRow.ai_intent_confidence : '-' }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>{{ $t('report.intentSource') }}</dt>
+            <dd>{{ selectedRow.ai_intent_source || '-' }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>{{ $t('report.intentLatency') }}</dt>
+            <dd>{{ fmtUs(selectedRow.ai_intent_latency_us) }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>{{ $t('report.intentCacheHit') }}</dt>
+            <dd>{{ selectedRow.ai_intent_cache_hit == null ? '-' : (selectedRow.ai_intent_cache_hit ? $t('report.yes') : $t('report.no')) }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>{{ $t('report.intentQuestionsVersion') }}</dt>
+            <dd>{{ selectedRow.ai_intent_questions_version || '-' }}</dd>
+          </div>
         </dl>
 
         <div class="detail-json-section" v-for="f in jsonFields" :key="f">
@@ -149,6 +216,11 @@ export default {
       requestedModels: '',
       errOnly: 'false',
       keyword: '',
+      cacheStatus: '',
+      mirrorHit: '',
+      intentQuestion: '',
+      intentAnswer: '',
+      intentSource: '',
       expandedJson: {},
       jsonFields: ['ai_rate_limit_hits', 'ai_auth_reject_quota_plans', 'req_headers', 'res_headers'],
       version: 0,
@@ -260,6 +332,33 @@ export default {
           }
         },
         {
+          title: this.$t('report.colCache'),
+          key: 'ai_cache_status',
+          width: 80,
+          renderHeader: (h) => h('span', { style: thStyle }, this.$t('report.colCache')),
+          render: (h, params) => h('span', { style: tdStyle }, params.row.ai_cache_status || '-')
+        },
+        {
+          title: this.$t('report.colMirror'),
+          key: 'mirror_hit',
+          width: 110,
+          renderHeader: (h) => h('span', { style: thStyle }, this.$t('report.colMirror')),
+          render: (h, params) => {
+            const row = params.row;
+            const val = row.mirror_hit
+              ? this.$t('report.mirrorHitYes') + (row.mirror_cluster ? '（' + row.mirror_cluster + '）' : '')
+              : '-';
+            return h('span', { style: tdStyle }, val);
+          }
+        },
+        {
+          title: this.$t('report.intentAnswer'),
+          key: 'ai_intent_answer',
+          width: 120,
+          renderHeader: (h) => h('span', { style: thStyle }, this.$t('report.intentAnswer')),
+          render: (h, params) => h('span', { style: tdStyle }, params.row.ai_intent_answer || '-')
+        },
+        {
           title: this.$t('report.error'),
           key: 'err_msg',
           minWidth: 150,
@@ -301,6 +400,11 @@ export default {
       if (this.requestedModels) params.requested_models = this.requestedModels;
       if (this.errOnly === 'true') params.err_only = true;
       if (this.keyword) params.keyword = this.keyword;
+      if (this.cacheStatus) params.cache_status = this.cacheStatus;
+      if (this.mirrorHit !== '' && this.mirrorHit != null) params.mirror_hit = this.mirrorHit === '1';
+      if (this.intentQuestion) params.intent_question = this.intentQuestion;
+      if (this.intentAnswer) params.intent_answer = this.intentAnswer;
+      if (this.intentSource) params.intent_source = this.intentSource;
 
       this.$request({ url: 'report/logs', method: 'get', params, openapi: true })
         .then(res => {
@@ -319,6 +423,10 @@ export default {
     },
 
     searchLogs() {
+      if (String(this.keyword || '').length > 128) {
+        this.$Message.error(this.$t('report.keywordTooLong'));
+        return;
+      }
       this.page = 1;
       this.$emit('search');
     },

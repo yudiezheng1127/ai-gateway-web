@@ -3,7 +3,7 @@
     <!-- Skeleton Loading -->
     <template v-if="loading && !overviewData">
       <div class="metric-cards">
-        <div class="metric-card skeleton" v-for="i in 5" :key="'s-m-' + i">
+        <div class="metric-card skeleton" v-for="i in 8" :key="'s-m-' + i">
           <div class="skeleton-label"></div>
           <div class="skeleton-value"></div>
         </div>
@@ -47,6 +47,21 @@
         <div class="metric-sub" v-for="c in (overviewData.cost || []).slice(1)" :key="c.currency">
           {{ c.currency }}: {{ fmtNum(c.value) }}
         </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">{{ $t('report.cacheHitRate') }}</div>
+        <div class="metric-value">{{ fmtPercent((overviewData.cache || {}).hit_rate) }}</div>
+        <div class="metric-sub">{{ $t('report.cacheHitSub', { hit: fmtNum((overviewData.cache || {}).hit_count), miss: fmtNum((overviewData.cache || {}).miss_count), skip: fmtNum((overviewData.cache || {}).skip_count) }) }}</div>
+        <div class="metric-sub">{{ $t('report.cacheTokenSub', { read: fmtNum((overviewData.cache || {}).read_tokens), write: fmtNum((overviewData.cache || {}).write_tokens) }) }}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">{{ $t('report.mirrorHit') }}</div>
+        <div class="metric-value">{{ fmtNum((overviewData.mirror || {}).hit_count) }}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">{{ $t('report.intentClassified') }}</div>
+        <div class="metric-value">{{ fmtNum((overviewData.intent || {}).classified_count) }}</div>
+        <div class="metric-sub">{{ $t('report.intentUnknownSub', { unknown: fmtNum((overviewData.intent || {}).unknown_count), rate: fmtPercent((overviewData.intent || {}).unknown_rate) }) }}</div>
       </div>
     </div>
 
@@ -97,6 +112,13 @@
         <h4>{{ $t('report.statusDist') }}</h4>
         <div class="chart-box">
           <Echarts v-if="statusDistOption.series" :option="statusDistOption" height="100%" />
+          <div v-else class="chart-empty">{{ $t('report.noData') }}</div>
+        </div>
+      </div>
+      <div class="chart-card chart-full">
+        <h4>{{ $t('report.cacheTokensTimeseries') }}</h4>
+        <div class="chart-box">
+          <Echarts v-if="cacheTokensOption.series" :option="cacheTokensOption" height="100%" />
           <div v-else class="chart-empty">{{ $t('report.noData') }}</div>
         </div>
       </div>
@@ -197,6 +219,30 @@ export default {
       return this.chartOptionsPie(
         items.map(i => ({ name: i.name, value: i.request_count }))
       );
+    },
+
+    cacheTokensOption() {
+      const series = (this.timeseriesData.cache_tokens || {}).series || [];
+      if (!series.length) return {};
+      const times = [];
+      series.forEach(p => {
+        if (times.indexOf(p.time) === -1) times.push(p.time);
+      });
+      times.sort((a, b) => a - b);
+      const readMap = {};
+      const writeMap = {};
+      series.forEach(p => {
+        if (p.kind === 'cache_read') readMap[p.time] = p.value;
+        if (p.kind === 'cache_write') writeMap[p.time] = p.value;
+      });
+      return this.chartOptionsLine(
+        times.map(t => this.formatTs(t)),
+        [
+          { name: 'cache_read', data: times.map(t => (readMap[t] != null ? readMap[t] : '-')) },
+          { name: 'cache_write', data: times.map(t => (writeMap[t] != null ? writeMap[t] : '-')) }
+        ],
+        'tokens'
+      );
     }
   },
 
@@ -209,10 +255,11 @@ export default {
         this.$request({ url: 'report/timeseries', method: 'get', params: { ...filterParams, metric: 'qps' }, openapi: true }),
         this.$request({ url: 'report/timeseries', method: 'get', params: { ...filterParams, metric: 'tokens' }, openapi: true }),
         this.$request({ url: 'report/timeseries', method: 'get', params: { ...filterParams, metric: 'latency' }, openapi: true }),
+        this.$request({ url: 'report/timeseries', method: 'get', params: { ...filterParams, metric: 'cache_tokens' }, openapi: true }),
         this.$request({ url: 'report/rankings', method: 'get', params: { ...filterParams, dimension: 'model', limit: 10 }, openapi: true }),
         this.$request({ url: 'report/distribution', method: 'get', params: { ...filterParams, dimension: 'status' }, openapi: true }),
         this.$request({ url: 'report/rankings', method: 'get', params: { ...filterParams, dimension: 'provider', limit: 10 }, openapi: true })
-      ]).then(([overviewRes, qpsRes, tokensRes, latencyRes, rankingRes, statusRes, providerRankingRes]) => {
+      ]).then(([overviewRes, qpsRes, tokensRes, latencyRes, cacheTokensRes, rankingRes, statusRes, providerRankingRes]) => {
         if (overviewRes.status === 200) {
           this.overviewData = overviewRes.data.Data || {};
         }
@@ -220,6 +267,7 @@ export default {
         if (qpsRes.status === 200) tsData.qps = qpsRes.data.Data || {};
         if (tokensRes.status === 200) tsData.tokens = tokensRes.data.Data || {};
         if (latencyRes.status === 200) tsData.latency = latencyRes.data.Data || {};
+        if (cacheTokensRes.status === 200) tsData.cache_tokens = cacheTokensRes.data.Data || {};
         this.timeseriesData = tsData;
 
         if (rankingRes.status === 200) {
@@ -292,7 +340,7 @@ export default {
 
   .metric-cards {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 12px;
     margin-bottom: 16px;
   }

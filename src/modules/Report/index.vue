@@ -109,12 +109,50 @@
           </div>
           <div class="report-filter-item">
             <label class="filter-item-label">{{ $t('report.statusCodes') }}</label>
-            <i-Input
+            <Input
               v-model="filters.status_codes"
               :placeholder="$t('report.statusCodesPlaceholder')"
               style="width:120px"
             />
           </div>
+          <div class="report-filter-item">
+            <label class="filter-item-label">{{ $t('report.cacheStatus') }}</label>
+            <Select
+              v-model="filters.cache_status"
+              :placeholder="$t('report.allOption')"
+              style="width:100px"
+              clearable
+            >
+              <Option value="hit">{{ $t('report.cacheStatusHit') }}</Option>
+              <Option value="miss">{{ $t('report.cacheStatusMiss') }}</Option>
+              <Option value="skip">{{ $t('report.cacheStatusSkip') }}</Option>
+            </Select>
+          </div>
+          <div class="report-filter-item">
+            <label class="filter-item-label">{{ $t('report.mirrorHit') }}</label>
+            <Select
+              v-model="filters.mirror_hit"
+              :placeholder="$t('report.allOption')"
+              style="width:100px"
+              clearable
+            >
+              <Option value="1">{{ $t('report.mirrorHitYes') }}</Option>
+              <Option value="0">{{ $t('report.mirrorHitNo') }}</Option>
+            </Select>
+          </div>
+          <div class="report-filter-item">
+            <label class="filter-item-label">{{ $t('report.intentAnswer') }}</label>
+            <Select
+              v-model="filters.intent_answer"
+              filterable
+              :placeholder="$t('report.allOption')"
+              style="min-width:140px"
+              clearable
+            >
+              <Option v-for="a in intentAnswerOptions" :key="a" :value="a">{{ a }}</Option>
+            </Select>
+          </div>
+          <div class="doris-hint">{{ $t('report.dorisNewDimHint') }}</div>
           <Button type="primary" @click="applyFilters">{{ $t('report.query') }}</Button>
           <Button @click="resetFilters">{{ $t('com.reset') }}</Button>
         </div>
@@ -169,11 +207,15 @@ export default {
         hosts: [],
         stream: '',
         status_codes: '',
+        cache_status: '',
+        mirror_hit: '',
+        intent_answer: '',
       },
       modelOptions: [],
       apikeyOptions: [],
       providerOptions: [],
       hostOptions: [],
+      intentAnswerOptions: [],
       filterOptionsRange: null,
     };
   },
@@ -289,6 +331,9 @@ export default {
 
     // ==================== Filters ====================
     buildFilterParams() {
+      // 缓存状态 / 镜像命中 / 意图答案 3 个新维度仅排行/分布（MySQL 后端）使用，
+      // 后端未将其定义为 overview/timeseries/logs 的通用过滤参数，故不并入通用查询参数，
+      // 明细侧的同名过滤项由 Logs 工具栏独立提供，避免参数重复与 Doris 后端 422
       const params = {
         start: this.toUnixTimestamp(this.startTime),
         end: this.toUnixTimestamp(this.endTime),
@@ -343,6 +388,9 @@ export default {
         hosts: [],
         stream: '',
         status_codes: '',
+        cache_status: '',
+        mirror_hit: '',
+        intent_answer: '',
       };
       this.applyFilters();
     },
@@ -375,9 +423,14 @@ export default {
         { key: 'apikey', field: 'apikeyOptions' },
         { key: 'provider', field: 'providerOptions' },
         { key: 'host', field: 'hostOptions' },
+        // ai_intent_answer 仅 MySQL 后端支持，Doris 后端请求返回 422；
+        // 用 unneedTips 抑制通用错误弹窗，改由筛选栏常显的橙色提示说明该限制
+        { key: 'ai_intent_answer', field: 'intentAnswerOptions', unneedTips: true },
       ];
-      dimensions.forEach(({ key, field }) => {
-        this.$request({ url: 'report/rankings', method: 'get', params: { ...params, dimension: key, limit: 50 }, openapi: true })
+      dimensions.forEach(({ key, field, unneedTips }) => {
+        const config = { url: 'report/rankings', method: 'get', params: { ...params, dimension: key, limit: 50 }, openapi: true };
+        if (unneedTips) config.unneedTips = true;
+        this.$request(config)
           .then(res => {
             if (res.status === 200 && res.data.Data) {
               this[field] = (res.data.Data.items || []).map(i => i.name);
@@ -447,6 +500,12 @@ export default {
     white-space: nowrap;
     min-width: 52px;
     text-align: right;
+  }
+
+  .doris-hint {
+    flex-basis: 100%;
+    font-size: 12px;
+    color: #ff9900;
   }
 }
 </style>

@@ -142,7 +142,7 @@
       /* ===== Metric Cards ===== */
       .metric-cards {
         display: grid;
-        grid-template-columns: repeat(5, 1fr);
+        grid-template-columns: repeat(4, 1fr);
         gap: 12px;
         margin-bottom: 16px;
       }
@@ -341,7 +341,10 @@
           providers: [],
           hosts: [],
           stream: '',
-          status_codes: ''
+          status_codes: '',
+          ai_cache_status: '',
+          mirror_hit: '',
+          ai_intent_answer: ''
         },
         overviewData: null,
         timeseriesData: null,
@@ -352,6 +355,11 @@
         logRequestedModels: '',
         logErrOnly: false,
         logKeyword: '',
+        logCacheStatus: '',
+        logMirrorHit: '',
+        logIntentQuestion: '',
+        logIntentAnswer: '',
+        logIntentSource: '',
         logData: null,
         drawerLog: null,
         charts: {}
@@ -455,6 +463,16 @@
           '<div class="report-filter-item"><label>状态码</label>' +
           '<input id="filter-status_codes" value="' + state.filters.status_codes + '" placeholder="逗号分隔" style="min-width:100px">' +
           '</div>' +
+          '<div class="report-filter-item"><label>缓存状态</label>' +
+          '<select id="filter-ai_cache_status"><option value="">全部</option><option value="hit">hit</option><option value="miss">miss</option><option value="skip">skip</option></select>' +
+          '</div>' +
+          '<div class="report-filter-item"><label>镜像命中</label>' +
+          '<select id="filter-mirror_hit"><option value="">全部</option><option value="1">命中</option><option value="0">未命中</option></select>' +
+          '</div>' +
+          '<div class="report-filter-item"><label>意图答案</label>' +
+          '<select id="filter-ai_intent_answer"><option value="">全部</option></select>' +
+          '</div>' +
+          '<div style="flex-basis:100%;font-size:12px;color:#ff9900;">提示：缓存状态 / 镜像命中 / 意图答案 新维度与排行仅 MySQL 后端支持，Doris 后端返回 422。</div>' +
           '<div class="report-filter-actions">' +
           '<button class="primary" onclick="applyFilters()">查询</button>' +
           '<button onclick="resetFilters()">重置</button>' +
@@ -476,6 +494,9 @@
         state.filters.hosts = getSelectValues('filter-hosts');
         state.filters.stream = document.getElementById('filter-stream').value;
         state.filters.status_codes = document.getElementById('filter-status_codes').value;
+        state.filters.ai_cache_status = document.getElementById('filter-ai_cache_status').value;
+        state.filters.mirror_hit = document.getElementById('filter-mirror_hit').value;
+        state.filters.ai_intent_answer = document.getElementById('filter-ai_intent_answer').value;
       }
 
       function getSelectValues(id) {
@@ -496,17 +517,20 @@
         state.start = now() - 3600;
         state.end = now();
         state.shortcut = '1h';
-        state.filters = { models: [], apikey_ids: [], providers: [], hosts: [], stream: '', status_codes: '' };
+        state.filters = { models: [], apikey_ids: [], providers: [], hosts: [], stream: '', status_codes: '', ai_cache_status: '', mirror_hit: '', ai_intent_answer: '' };
         document.getElementById('filter-start').value = fmtDate(state.start);
         document.getElementById('filter-end').value = fmtDate(state.end);
         document.getElementById('filter-stream').value = '';
         document.getElementById('filter-status_codes').value = '';
+        document.getElementById('filter-ai_cache_status').value = '';
+        document.getElementById('filter-mirror_hit').value = '';
+        document.getElementById('filter-ai_intent_answer').value = '';
         renderTimeShortcuts();
         loadTabData();
       }
 
       function populateSelectOptions() {
-        var dims = { 'filter-models': 'model', 'filter-apikey_ids': 'apikey', 'filter-providers': 'provider', 'filter-hosts': 'host' };
+        var dims = { 'filter-models': 'model', 'filter-apikey_ids': 'apikey', 'filter-providers': 'provider', 'filter-hosts': 'host', 'filter-ai_intent_answer': 'ai_intent_answer' };
         Object.keys(dims).forEach(function (id) {
           var rankingKey = dims[id];
           var items = (MockData.reportRankings[rankingKey] || {}).items || [];
@@ -627,6 +651,10 @@
           return '<div class="metric-sub">' + c.currency + ': ' + fmtNum(c.value) + '</div>';
         }).join('');
 
+        var cache = d.cache || {};
+        var mirror = d.mirror || {};
+        var intent = d.intent || {};
+
         return '' +
           '<div class="metric-cards">' +
           '<div class="metric-card"><div class="metric-label">请求总量</div><div class="metric-value">' + fmtNum(d.request_total) + '</div></div>' +
@@ -634,6 +662,9 @@
           '<div class="metric-card"><div class="metric-label">Token 消耗</div><div class="metric-value">' + fmtNum(d.total_tokens) + '</div><div class="metric-sub">入: ' + fmtNum(d.input_tokens) + ' | 出: ' + fmtNum(d.output_tokens) + '</div></div>' +
           '<div class="metric-card"><div class="metric-label">平均延迟</div><div class="metric-value">' + fmtMs(d.latency_avg_ms) + '</div></div>' +
           '<div class="metric-card"><div class="metric-label">成本</div><div class="metric-value">' + costMain + '</div>' + costSub + '</div>' +
+          '<div class="metric-card"><div class="metric-label">缓存命中率</div><div class="metric-value">' + fmtPercent(cache.hit_rate) + '</div><div class="metric-sub">命中: ' + fmtNum(cache.hit_count) + ' | 未命中: ' + fmtNum(cache.miss_count) + ' | 豁免: ' + fmtNum(cache.skip_count) + '</div><div class="metric-sub">读 Token: ' + fmtNum(cache.read_tokens) + ' | 写 Token: ' + fmtNum(cache.write_tokens) + '</div></div>' +
+          '<div class="metric-card"><div class="metric-label">镜像命中</div><div class="metric-value">' + fmtNum(mirror.hit_count) + '</div></div>' +
+          '<div class="metric-card"><div class="metric-label">意图分类</div><div class="metric-value">' + fmtNum(intent.classified_count) + '</div><div class="metric-sub">未知: ' + fmtNum(intent.unknown_count) + '（' + fmtPercent(intent.unknown_rate) + '）</div></div>' +
           '</div>' +
 
           '<div class="chart-grid">' +
@@ -643,6 +674,7 @@
           '<div class="chart-card"><h4>模型 Top10 排行</h4><div class="chart-box tall" id="chart-model-ranking"></div></div>' +
           '<div class="chart-card"><h4>提供商占比</h4><div class="chart-box" id="chart-provider-pie"></div></div>' +
           '<div class="chart-card"><h4>状态码分布</h4><div class="chart-box" id="chart-status-pie"></div></div>' +
+          '<div class="chart-card chart-full"><h4>缓存 Token 时序（cache_read / cache_write）</h4><div class="chart-box" id="chart-cache-tokens"></div></div>' +
           '</div>';
       }
 
@@ -707,6 +739,27 @@
           })));
         }
 
+        // Cache Tokens Line (kind: cache_read / cache_write)
+        var cacheSeries = (state.timeseriesData.cache_tokens || {}).series || [];
+        var cacheTimes = [];
+        cacheSeries.forEach(function (p) {
+          if (cacheTimes.indexOf(p.time) === -1) cacheTimes.push(p.time);
+        });
+        cacheTimes.sort(function (a, b) { return a - b; });
+        var cacheReadMap = {};
+        var cacheWriteMap = {};
+        cacheSeries.forEach(function (p) {
+          if (p.kind === 'cache_read') cacheReadMap[p.time] = p.value;
+          if (p.kind === 'cache_write') cacheWriteMap[p.time] = p.value;
+        });
+        var chartCache = initChart('chart-cache-tokens');
+        if (chartCache) {
+          chartCache.setOption(chartOptionsLine(cacheTimes.map(function (t) { return fmtTs(t); }), [
+            { name: 'cache_read', data: cacheTimes.map(function (t) { return cacheReadMap[t] != null ? cacheReadMap[t] : '-'; }) },
+            { name: 'cache_write', data: cacheTimes.map(function (t) { return cacheWriteMap[t] != null ? cacheWriteMap[t] : '-'; }) }
+          ], 'tokens'));
+        }
+
         // Resize all
         setTimeout(function () {
           Object.keys(state.charts).forEach(function (k) {
@@ -722,6 +775,11 @@
         document.getElementById('logs-req-models').value = state.logRequestedModels;
         document.getElementById('logs-err-only').value = state.logErrOnly ? '1' : '0';
         document.getElementById('logs-keyword').value = state.logKeyword;
+        document.getElementById('logs-cache-status').value = state.logCacheStatus;
+        document.getElementById('logs-mirror-hit').value = state.logMirrorHit;
+        document.getElementById('logs-intent-question').value = state.logIntentQuestion;
+        document.getElementById('logs-intent-answer').value = state.logIntentAnswer;
+        document.getElementById('logs-intent-source').value = state.logIntentSource;
       }
 
       function changeLogPage(dir) {
@@ -758,6 +816,11 @@
         state.logRequestedModels = document.getElementById('logs-req-models').value;
         state.logErrOnly = document.getElementById('logs-err-only').value === '1';
         state.logKeyword = document.getElementById('logs-keyword').value;
+        state.logCacheStatus = document.getElementById('logs-cache-status').value;
+        state.logMirrorHit = document.getElementById('logs-mirror-hit').value;
+        state.logIntentQuestion = document.getElementById('logs-intent-question').value;
+        state.logIntentAnswer = document.getElementById('logs-intent-answer').value;
+        state.logIntentSource = document.getElementById('logs-intent-source').value;
         state.logPage = 1;
         loadLogs();
       }
@@ -770,6 +833,11 @@
           '<div><label>请求模型</label><br><input id="logs-req-models" placeholder="逗号分隔"></div>' +
           '<div><label>只看错误</label><br><select id="logs-err-only"><option value="0">否</option><option value="1">是</option></select></div>' +
           '<div><label>错误消息关键字</label><br><input id="logs-keyword" placeholder="模糊匹配 err_msg"></div>' +
+          '<div><label>缓存状态</label><br><select id="logs-cache-status"><option value="">全部</option><option value="hit">hit</option><option value="miss">miss</option><option value="skip">skip</option></select></div>' +
+          '<div><label>镜像命中</label><br><select id="logs-mirror-hit"><option value="">全部</option><option value="1">命中</option><option value="0">未命中</option></select></div>' +
+          '<div><label>意图问题</label><br><input id="logs-intent-question" placeholder="模糊匹配 ai_intent_question"></div>' +
+          '<div><label>意图答案</label><br><input id="logs-intent-answer" placeholder="模糊匹配 ai_intent_answer"></div>' +
+          '<div><label>意图来源</label><br><select id="logs-intent-source"><option value="">全部</option><option value="explicit_header">explicit_header</option><option value="classifier">classifier</option><option value="cache">cache</option></select></div>' +
           '<div style="display:flex;align-items:flex-end"><button onclick="refreshLogs()">搜索</button></div>' +
           '</div>' +
 
@@ -777,7 +845,7 @@
 
           '<table class="ivu-table" style="width:100%"><thead><tr>' +
           '<th>Log ID</th><th>时间</th><th>API Key</th><th>请求模型</th><th>目标模型</th><th>提供商</th>' +
-          '<th>状态码</th><th>耗时</th><th>Token</th><th>TTFT</th><th>成本</th><th>错误</th>' +
+          '<th>状态码</th><th>耗时</th><th>Token</th><th>TTFT</th><th>成本</th><th>缓存</th><th>镜像</th><th>意图答案</th><th>错误</th>' +
           '<th style="width:80px">操作</th>' +
           '</tr></thead><tbody>';
 
@@ -795,6 +863,9 @@
             '<td>' + fmtNum(log.ai_total_tokens) + '</td>' +
             '<td>' + fmtUs(log.ai_ttft_us) + '</td>' +
             '<td>' + (log.ai_cost_value != null ? log.ai_cost_value + ' ' + (log.ai_cost_currency || '') : '-') + '</td>' +
+            '<td>' + (log.ai_cache_status || '-') + '</td>' +
+            '<td>' + (log.mirror_hit ? '命中' + (log.mirror_cluster ? '（' + log.mirror_cluster + '）' : '') : '-') + '</td>' +
+            '<td>' + (log.ai_intent_answer || '-') + '</td>' +
             '<td>' + (log.err_msg ? '<span style="color:#ed4014">' + (log.err_msg.length > 20 ? log.err_msg.substring(0, 20) + '…' : log.err_msg) + '</span>' : '-') + '</td>' +
             '<td><span class="log-view-btn" onclick="openLogDrawer(state.logData.items.find(function(i){return i.logid===' + log.logid + '}))">查看</span></td>' +
             '</tr>';
@@ -841,6 +912,15 @@
           '<dt>client_ip</dt><dd>' + (log.client_ip || '-') + '</dd>' +
           '<dt>header_host</dt><dd>' + (log.header_host || '-') + '</dd>' +
           '<dt>origin_uri</dt><dd>' + (log.origin_uri || '-') + '</dd>' +
+          '<dt>缓存状态</dt><dd>' + (log.ai_cache_status || '-') + '</dd>' +
+          '<dt>镜像命中</dt><dd>' + (log.mirror_hit ? '是' + (log.mirror_cluster ? '（' + log.mirror_cluster + '）' : '') : '否') + '</dd>' +
+          '<dt>意图问题</dt><dd>' + (log.ai_intent_question || '-') + '</dd>' +
+          '<dt>意图答案</dt><dd>' + (log.ai_intent_answer || '-') + '</dd>' +
+          '<dt>意图置信度</dt><dd>' + (log.ai_intent_confidence != null ? log.ai_intent_confidence : '-') + '</dd>' +
+          '<dt>意图来源</dt><dd>' + (log.ai_intent_source || '-') + '</dd>' +
+          '<dt>意图延迟</dt><dd>' + fmtUs(log.ai_intent_latency_us) + '</dd>' +
+          '<dt>意图缓存命中</dt><dd>' + (log.ai_intent_cache_hit == null ? '-' : (log.ai_intent_cache_hit ? '是' : '否')) + '</dd>' +
+          '<dt>意图问题版本</dt><dd>' + (log.ai_intent_questions_version || '-') + '</dd>' +
           jsonHtml +
           '</dl>';
       }

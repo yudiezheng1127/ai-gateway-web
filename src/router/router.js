@@ -96,6 +96,36 @@ export default [
       },
       {
         component: (r) =>
+          require.ensure(
+            [],
+            () => r(require('../modules/AICache')),
+            'ai-cache-rule',
+          ),
+        path: 'ai-cache-rules',
+        name: 'AICacheRule.list',
+      },
+      {
+        component: (r) =>
+          require.ensure(
+            [],
+            () => r(require('../modules/TrafficMirror')),
+            'traffic-mirror-rule',
+          ),
+        path: 'traffic-mirror-rules',
+        name: 'TrafficMirrorRule.list',
+      },
+      {
+        component: (r) =>
+          require.ensure(
+            [],
+            () => r(require('../modules/IntentConfig')),
+            'intent-config',
+          ),
+        path: 'intent-config',
+        name: 'IntentConfig.list',
+      },
+      {
+        component: (r) =>
           require.ensure([], () => r(require('../modules/APIKey')), 'APIKey'),
         path: 'api-key',
         name: 'APIKey.list',
